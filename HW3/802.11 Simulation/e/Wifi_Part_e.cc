@@ -43,14 +43,12 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   lossModel->SetDefaultLoss (120); // set default loss to 120 dB (no link)
   for (int i = 0; i<n ; i++){
     lossModel->SetLoss (nodes.Get (i)->GetObject<MobilityModel> (), nodes.Get (i+n)->GetObject<MobilityModel> (), 40); //Ai, Bi, 40dB
-    //lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (i+n+1)->GetObject<MobilityModel> (), 50); //Bi, Bi+1, 50dB
   }
-  for (int i=0 ; i<n ; i++){
+  for (int i=0 ; i<n ; i++){ //Every Bi node is connected
     for (int j=i+1 ; j<n ; j++){
         lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (j+n)->GetObject<MobilityModel> (), 50); //Bi, Bj, 50dB
     }
   }
-
 
   // 4. Create & setup wifi channel
   Ptr<YansWifiChannel> wifiChannel = CreateObject <YansWifiChannel> ();
@@ -74,11 +72,10 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   ipv4.SetBase ("19.71.8.0", "255.255.255.0"); //98109718 --> 19.71.8.0
   ipv4.Assign (devices);
 
-  // 7. Install applications: two CBR streams each saturating the channel
+  // 7. Install applications: n CBR streams each saturating the channel
   ApplicationContainer cbrApps;
   uint16_t cbrPort = 12345;
 
-  //std::vector<OnOffHelper> onOffHelpers;
   for (int i=0;i<n;i++){
     std::string s = "19.71.8."+std::to_string(i+1);
     const char * s_ip = s.c_str();
@@ -90,38 +87,14 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
     onOff.SetAttribute ("DataRate", StringValue ("3000000bps"));
     onOff.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
     cbrApps.Add (onOff.Install (nodes.Get (i+n))); //Bi
-
-    //onOffHelpers.push_back(onOff);
   }
-  /*
-  OnOffHelper onOffHelper1 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.71.8.5"), cbrPort));
-  onOffHelper1.SetAttribute ("PacketSize", UintegerValue (1400));
-  onOffHelper1.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  onOffHelper1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-  // flow 1:  node 1 -> node 0
-  onOffHelper1.SetAttribute ("DataRate", StringValue ("3000000bps"));
-  onOffHelper1.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
-  cbrApps.Add (onOffHelper1.Install (nodes.Get (0)));
-
-
-  OnOffHelper onOffHelper2 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.71.8.6"), cbrPort));
-  onOffHelper2.SetAttribute ("PacketSize", UintegerValue (1400));
-  onOffHelper2.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  onOffHelper2.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-  // flow 2:  node 3 -> node 4
-  onOffHelper2.SetAttribute ("DataRate", StringValue ("3000000bps"));
-  onOffHelper2.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
-  cbrApps.Add (onOffHelper2.Install (nodes.Get (1)));
-  */
-
+  
   /** \internal
    * We also use separate UDP applications that will send a single
    * packet before the CBR flows start.
    * This is a workaround for the lack of perfect ARP, see \bugid{187}
    */
   uint16_t  echoPort = 9;
-  //std::vector<UdpEchoClientHelper> echoClientHelpers;
-  //std::vector<ApplicationContainer> PingApps;
   for (int i=0;i<n;i++){
     std::string s = "19.71.8."+std::to_string(i+1);
     const char * s_ip = s.c_str();
@@ -135,29 +108,7 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
     // again using different start times to workaround Bug 388 and Bug 912
     echoC.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
     pingA.Add (echoC.Install (nodes.Get (i+n))); //Bi
-
-    //choClientHelpers.push_back(echoC);
-    //PingApps.push_back(pingA);
   }
-  /*
-  UdpEchoClientHelper echoClientHelper1 (Ipv4Address ("19.71.8.5"), echoPort);
-  echoClientHelper1.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClientHelper1.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
-  echoClientHelper1.SetAttribute ("PacketSize", UintegerValue (10));
-  ApplicationContainer pingApps1;
-  // again using different start times to workaround Bug 388 and Bug 912
-  echoClientHelper1.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
-  pingApps1.Add (echoClientHelper1.Install (nodes.Get (0)));
-
-  UdpEchoClientHelper echoClientHelper2 (Ipv4Address ("19.71.8.6"), echoPort);
-  echoClientHelper2.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClientHelper2.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
-  echoClientHelper2.SetAttribute ("PacketSize", UintegerValue (10));
-  ApplicationContainer pingApps2;
-  // again using different start times to workaround Bug 388 and Bug 912
-  echoClientHelper2.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
-  pingApps2.Add (echoClientHelper2.Install (nodes.Get (1)));
-  */
 
   // 8. Install FlowMonitor on all nodes
   FlowMonitorHelper flowmon;
@@ -186,13 +137,12 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   mobility.SetPositionAllocator (positionAlloc);
   mobility.Install (nodes);
 
-
   // 9. Run simulation for 10 seconds
   Simulator::Stop (Seconds (10));
   Simulator::Run ();
 
   // 10. Print per flow statistics 
-  double throu = 0;
+  double throu = 0; //for avraging
   monitor->CheckForLostPackets ();
   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
   FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
