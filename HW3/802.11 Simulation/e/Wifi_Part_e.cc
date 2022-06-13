@@ -17,6 +17,7 @@
 #include "ns3/core-module.h"
 #include "ns3/netanim-module.h"
 #include "ns3/mobility-module.h"
+#include <string>
 
 using namespace ns3;
 
@@ -40,15 +41,15 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   // 3. Create propagation loss matrix
   Ptr<MatrixPropagationLossModel> lossModel = CreateObject<MatrixPropagationLossModel> ();
   lossModel->SetDefaultLoss (120); // set default loss to 120 dB (no link)
-  //lossModel->SetLoss (nodes.Get (0)->GetObject<MobilityModel> (), nodes.Get (1)->GetObject<MobilityModel> (), 40); // set symmetric loss 0 <-> 1 to 40 dB
-  //lossModel->SetLoss (nodes.Get (1)->GetObject<MobilityModel> (), nodes.Get (2)->GetObject<MobilityModel> (), 50); // set symmetric loss 2 <-> 1 to 50 dB
-  //lossModel->SetLoss (nodes.Get (2)->GetObject<MobilityModel> (), nodes.Get (3)->GetObject<MobilityModel> (), 40); // set symmetric loss 2 <-> 3 to 40 dB
-  for (int i = 0; i<n-1 ; i++){
-    //std::cout << i << "\n";
+  for (int i = 0; i<n ; i++){
     lossModel->SetLoss (nodes.Get (i)->GetObject<MobilityModel> (), nodes.Get (i+n)->GetObject<MobilityModel> (), 40); //Ai, Bi, 40dB
-    lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (i+n+1)->GetObject<MobilityModel> (), 50); //Bi, Bi+1, 50dB
+    //lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (i+n+1)->GetObject<MobilityModel> (), 50); //Bi, Bi+1, 50dB
   }
-  lossModel->SetLoss (nodes.Get (n-1)->GetObject<MobilityModel> (), nodes.Get (2*n-1)->GetObject<MobilityModel> (), 40); //An, Bn, 40dB
+  for (int i=0 ; i<n ; i++){
+    for (int j=i+1 ; j<n ; j++){
+        lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (j+n)->GetObject<MobilityModel> (), 50); //Bi, Bj, 50dB
+    }
+  }
 
 
   // 4. Create & setup wifi channel
@@ -66,14 +67,6 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   wifiMac.SetType ("ns3::AdhocWifiMac"); // use ad-hoc MAC
   NetDeviceContainer devices = wifi.Install (wifiPhy, wifiMac, nodes);
 
-  // uncomment the following to have athstats output
-  // AthstatsHelper athstats;
-  // athstats.EnableAthstats(enableCtsRts ? "rtscts-athstats-node" : "basic-athstats-node" , nodes);
-
-  // uncomment the following to have pcap output
-  // wifiPhy.EnablePcap (enableCtsRts ? "rtscts-pcap-node" : "basic-pcap-node" , nodes);
-
-
   // 6. Install TCP/IP stack & assign IP addresses
   InternetStackHelper internet;
   internet.Install (nodes);
@@ -84,11 +77,27 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   // 7. Install applications: two CBR streams each saturating the channel
   ApplicationContainer cbrApps;
   uint16_t cbrPort = 12345;
+
+  //std::vector<OnOffHelper> onOffHelpers;
+  for (int i=0;i<n;i++){
+    std::string s = "19.71.8."+std::to_string(i+1);
+    const char * s_ip = s.c_str();
+    //std::cout << s_ip <<"\n";
+    OnOffHelper onOff ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address (s_ip), cbrPort));//Ai
+    onOff.SetAttribute ("PacketSize", UintegerValue (1400));
+    onOff.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+    onOff.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+    onOff.SetAttribute ("DataRate", StringValue ("3000000bps"));
+    onOff.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
+    cbrApps.Add (onOff.Install (nodes.Get (i+n))); //Bi
+
+    //onOffHelpers.push_back(onOff);
+  }
+  /*
   OnOffHelper onOffHelper1 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.71.8.5"), cbrPort));
   onOffHelper1.SetAttribute ("PacketSize", UintegerValue (1400));
   onOffHelper1.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
   onOffHelper1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-
   // flow 1:  node 1 -> node 0
   onOffHelper1.SetAttribute ("DataRate", StringValue ("3000000bps"));
   onOffHelper1.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
@@ -99,11 +108,11 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   onOffHelper2.SetAttribute ("PacketSize", UintegerValue (1400));
   onOffHelper2.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
   onOffHelper2.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-
   // flow 2:  node 3 -> node 4
   onOffHelper2.SetAttribute ("DataRate", StringValue ("3000000bps"));
   onOffHelper2.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
   cbrApps.Add (onOffHelper2.Install (nodes.Get (1)));
+  */
 
   /** \internal
    * We also use separate UDP applications that will send a single
@@ -111,28 +120,44 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
    * This is a workaround for the lack of perfect ARP, see \bugid{187}
    */
   uint16_t  echoPort = 9;
+  //std::vector<UdpEchoClientHelper> echoClientHelpers;
+  //std::vector<ApplicationContainer> PingApps;
+  for (int i=0;i<n;i++){
+    std::string s = "19.71.8."+std::to_string(i+1);
+    const char * s_ip = s.c_str();
+    //std::cout << s_ip <<"\n";
+    UdpEchoClientHelper echoC (Ipv4Address (s_ip), echoPort);//Ai
+    echoC.SetAttribute ("MaxPackets", UintegerValue (1));
+    echoC.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
+    echoC.SetAttribute ("PacketSize", UintegerValue (10));
+
+    ApplicationContainer pingA;
+    // again using different start times to workaround Bug 388 and Bug 912
+    echoC.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
+    pingA.Add (echoC.Install (nodes.Get (i+n))); //Bi
+
+    //choClientHelpers.push_back(echoC);
+    //PingApps.push_back(pingA);
+  }
+  /*
   UdpEchoClientHelper echoClientHelper1 (Ipv4Address ("19.71.8.5"), echoPort);
   echoClientHelper1.SetAttribute ("MaxPackets", UintegerValue (1));
   echoClientHelper1.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
   echoClientHelper1.SetAttribute ("PacketSize", UintegerValue (10));
   ApplicationContainer pingApps1;
-
   // again using different start times to workaround Bug 388 and Bug 912
   echoClientHelper1.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
   pingApps1.Add (echoClientHelper1.Install (nodes.Get (0)));
-  //echoClientHelper.SetAttribute ("StartTime", TimeValue (Seconds (0.006)));
-  //pingApps.Add (echoClientHelper.Install (nodes.Get (2)));
-
 
   UdpEchoClientHelper echoClientHelper2 (Ipv4Address ("19.71.8.6"), echoPort);
   echoClientHelper2.SetAttribute ("MaxPackets", UintegerValue (1));
   echoClientHelper2.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
   echoClientHelper2.SetAttribute ("PacketSize", UintegerValue (10));
   ApplicationContainer pingApps2;
-
   // again using different start times to workaround Bug 388 and Bug 912
   echoClientHelper2.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
   pingApps2.Add (echoClientHelper2.Install (nodes.Get (1)));
+  */
 
   // 8. Install FlowMonitor on all nodes
   FlowMonitorHelper flowmon;
@@ -150,10 +175,14 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
 
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0,0.0,0.0));//A1
-  positionAlloc->Add (Vector (0.0,10.0,0.0));//B1
-  positionAlloc->Add (Vector (10.0,10.0,0.0));//B2
-  positionAlloc->Add (Vector (10.0,0.0,0.0));//A2
+  //Mobility for A nodes
+  for (int i=0;i<n;i++){
+    positionAlloc->Add (Vector (10.0*i,0.0,0.0));//Ai
+  }
+  //Mobility for B nodes
+  for (int i=0;i<n;i++){
+    positionAlloc->Add (Vector (10.0*i,10.0,0.0));//Bi
+  }
   mobility.SetPositionAllocator (positionAlloc);
   mobility.Install (nodes);
 
@@ -162,19 +191,20 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   Simulator::Stop (Seconds (10));
   Simulator::Run ();
 
-  // 10. Print per flow statistics
+  // 10. Print per flow statistics 
+  double throu = 0;
   monitor->CheckForLostPackets ();
   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
   FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
-      // first 2 FlowIds are for ECHO apps, we don't want to display them
+      // first n FlowIds are for ECHO apps, we don't want to display them
       //
       // Duration for throughput measurement is 9.0 seconds, since
       //   StartTime of the OnOffApplication is at about "second 1"
       // and
       //   Simulator::Stops at "second 10".
-      if (i->first > 2)
+      if (i->first > (unsigned int)n)
         {
           Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
           std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
@@ -184,9 +214,11 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
           std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
           std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
           std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+          throu += i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000;
         }
     }
-
+  //print avrage throughput
+  std::cout << "Avrage Throughput for (n = " << n << ") : " << throu/n << " Mbps\n" ;
   // 11. Cleanup
   Simulator::Destroy ();
 }
