@@ -1,3 +1,6 @@
+// Frome Here :
+// https://www.geeksforgeeks.org/kruskals-minimum-spanning-tree-using-stl-in-c/
+//
 // C++ program for Kruskal's algorithm to find Minimum
 // Spanning Tree of a given connected, undirected and
 // weighted graph
@@ -84,12 +87,12 @@ struct DisjointSets
     }
 };
   
- /* Functions returns weight of the MST*/ 
+ /* Functions returns vector of the MST*/ 
   
 vector< pair<int, int> > Graph::kruskalMST()
 {
     double mst_wt = 0; // Initialize result
-    vector< pair<int, int> > out; ///////
+    vector< pair<int, int> > out; // vector of the tree
 
     // Sort edges in increasing order on basis of cost
     sort(edges.begin(), edges.end());
@@ -115,7 +118,7 @@ vector< pair<int, int> > Graph::kruskalMST()
             // Current edge will be in the MST
             // so print it
             //cout << u << " ---- " << v << endl;
-            out.push_back({u, v}); //////
+            out.push_back({u, v}); // nodes of the tree
   
             // Update MST weight
             mst_wt += it->first;
@@ -125,40 +128,18 @@ vector< pair<int, int> > Graph::kruskalMST()
         }
     }
   
-    return out;
+    return out; //vector, links of tree
 }
   
 // Driver program to test above functions
 int main()
 {
-    /* Let us create above shown weighted
-       and undirected graph */
-
-    /*
-    int V = 9, E = 14;
-    Graph g(V, E);
-  
-    //  making above shown graph
-    g.addEdge(0, 1, 4);
-    g.addEdge(0, 7, 8);
-    g.addEdge(1, 2, 8.8);
-    g.addEdge(1, 7, 11);
-    g.addEdge(2, 3, 7);
-    g.addEdge(2, 8, 2);
-    g.addEdge(2, 5, 4);
-    g.addEdge(3, 4, 9);
-    g.addEdge(3, 5, 14);
-    g.addEdge(4, 5, 10);
-    g.addEdge(5, 6, 2);
-    g.addEdge(6, 7, 1.7);
-    g.addEdge(6, 8, 6);
-    g.addEdge(7, 8, 7);
-    */
+    // Let us create weighted graph
 
     int V = 6, E = 12;
     Graph g(V, E);
   
-    //  making above shown graph
+    //  making the graph
     g.addEdge(1, 2, 50);
     g.addEdge(1, 3, 50);
     g.addEdge(1, 4, 186.6);
@@ -177,15 +158,12 @@ int main()
     g.addEdge(5, 6, 50);
 
     //cout << "Edges of MST are \n";
-
     vector< pair<int, int> > out = g.kruskalMST();
     
     int i = 0;
     for(i;i<out.size();i++){
         cout << out[i].first << "  &&&&  " << out[i].second << endl;
     }
-
-    //cout << "\nWeight of MST is " << out[0].first << endl;
   
     return 0;
 }
