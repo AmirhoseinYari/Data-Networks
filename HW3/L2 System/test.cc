@@ -1,82 +1,32 @@
 // FROM HERE :
 // https://github.com/microsoft/Tocino/blob/master/src/bridge/examples/csma-bridge-one-hop.cc
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-/*
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- */
- 
-// Network topology
-//
-//         bridge1         The node named bridge1 (node 5 in the nodelist)
-//   ------------------        has three CMSA net devices that are bridged
-//   CSMA   CSMA   CSMA        together using a BridgeNetDevice.
-//     |      |      |
-//     |      |      |     The bridge node talks over three CSMA channels
-//     |      |      |
-//   CSMA   CSMA   CSMA    to three other CSMA net devices
-//   ----   ----   ----
-//    n0     n1     n2     Node two acts as a router and talks to another
-//                 ----        bridge that connects the remaining nodes.
-//                 CSMA
-//                   |
-//    n3     n4      |
-//   ----   ----     |
-//   CSMA   CSMA     |
-//     |      |      |
-//     |      |      |
-//     |      |      |
-//   CSMA   CSMA   CSMA    The node named bridge2 (node 6 in the nodelist)
-//   ------------------        has three CMSA net devices that are bridged
-//        bridge2              together using a BridgeNetDevice.
-//
-// Or, more abstractly, recognizing that bridge 1 and bridge 2 are nodes
-// with three net devices:
-//
-//        n0     n1                (n0 = 10.1.1.2)
-//        |      |                 (n1 = 10.1.1.3)  Note odd addressing
-//       -----------               (n2 = 10.1.1.1)
-//       | bridge1 | <- n5
-//       -----------
-//           |
-//         router    <- n2
-//           |
-//       -----------
-//       | bridge2 | <- n6
-//       -----------               (n2 = 10.1.2.1)
-//        |      |                 (n3 = 10.1.2.2)
-//        n3     n4                (n4 = 10.1.2.3)
-//
-// So, this example shows two broadcast domains, each interconnected by a bridge
-// with a router node (n2) interconnecting the layer-2 broadcast domains
-//
-// It is meant to mirror somewhat the csma-bridge example but adds another
-// bridged link separated by a router.
-//
-// - CBR/UDP flows from n0 (10.1.1.2) to n1 (10.1.1.3) and from n3 (10.1.2.2) to n0 (10.1.1.3)
-// - DropTail queues
-// - Global static routing
-// - Tracing of queues and packet receptions to file "csma-bridge-one-hop.tr"
  
 #include <iostream>
 #include <fstream>
- 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/bridge-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
+
+#include "ns3/command-line.h"
+#include "ns3/config.h"
+#include "ns3/uinteger.h"
+#include "ns3/boolean.h"
+#include "ns3/string.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/internet-stack-helper.h"
+#include "ns3/ipv4-address-helper.h"
+#include "ns3/udp-echo-helper.h"
+#include "ns3/yans-wifi-channel.h"
+#include "ns3/constant-position-mobility-model.h"
+#include "ns3/propagation-loss-model.h"
+#include "ns3/propagation-delay-model.h"
+#include "ns3/on-off-helper.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/ipv4-flow-classifier.h"
+#include "ns3/netanim-module.h"
  
 using namespace ns3;
  
@@ -105,69 +55,98 @@ main (int argc, char *argv[])
   //
   NS_LOG_INFO ("Create nodes.");
  
-  Ptr<Node> n0 = CreateObject<Node> ();
-  Ptr<Node> n1 = CreateObject<Node> ();
-  Ptr<Node> n2 = CreateObject<Node> ();
-  Ptr<Node> n3 = CreateObject<Node> ();
-  Ptr<Node> n4 = CreateObject<Node> ();
+  Ptr<Node> c1 = CreateObject<Node> ();
+  Ptr<Node> c2 = CreateObject<Node> ();
+  Ptr<Node> c3 = CreateObject<Node> ();
+  Ptr<Node> c4 = CreateObject<Node> ();
+  Ptr<Node> c5 = CreateObject<Node> ();
+  Ptr<Node> c6 = CreateObject<Node> ();
+  Ptr<Node> c7 = CreateObject<Node> ();
+  Ptr<Node> c8 = CreateObject<Node> ();
  
-  Ptr<Node> bridge1 = CreateObject<Node> ();
-  Ptr<Node> bridge2 = CreateObject<Node> ();
+  Ptr<Node> N1 = CreateObject<Node> ();
+  Ptr<Node> N2 = CreateObject<Node> ();
+  Ptr<Node> N3 = CreateObject<Node> ();
+  Ptr<Node> N4 = CreateObject<Node> ();
+  Ptr<Node> N5 = CreateObject<Node> ();
+  Ptr<Node> N6 = CreateObject<Node> ();
  
   NS_LOG_INFO ("Build Topology");
   CsmaHelper csma;
-  csma.SetChannelAttribute ("DataRate", DataRateValue (5000000));
-  csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2)));
+  csma.SetChannelAttribute ("DataRate", DataRateValue (1000000)); //1Mbps
+  csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2))); //1u
  
   // Create the csma links, from each terminal to the bridge
   // This will create six network devices; we'll keep track separately
   // of the devices on and off the bridge respectively, for later configuration
-  NetDeviceContainer topLanDevices;
-  NetDeviceContainer topBridgeDevices;
- 
+  NetDeviceContainer LanDevices1;
+  NetDeviceContainer BridgeDevices1;
   // It is easier to iterate the nodes in C++ if we put them into a container
-  NodeContainer topLan (n2, n0, n1);
- 
-  for (int i = 0; i < 3; i++)
+  NodeContainer Lan1 (c1, c2);
+  for (int i = 0; i < 2; i++)
     {
-      // install a csma channel between the ith toplan node and the bridge node
-      NetDeviceContainer link = csma.Install (NodeContainer (topLan.Get (i), bridge1));
-      topLanDevices.Add (link.Get (0));
-      topBridgeDevices.Add (link.Get (1));
+      // install a csma channel between the ith lan1 node and the bridge1 node
+      NetDeviceContainer link = csma.Install (NodeContainer (Lan1.Get (i), N1));
+      LanDevices1.Add (link.Get (0));
+      BridgeDevices1.Add (link.Get (1));
     }
- 
+  
   //
   // Now, Create the bridge netdevice, which will do the packet switching.  The
   // bridge lives on the node bridge1 and bridges together the topBridgeDevices
   // which are the three CSMA net devices on the node in the diagram above.
   //
   BridgeHelper bridge;
-  bridge.Install (bridge1, topBridgeDevices);
+  bridge.Install (N1, BridgeDevices1);
  
   // Add internet stack to the router nodes
-  NodeContainer routerNodes (n0, n1, n2, n3, n4);
-  InternetStackHelper internet;
-  internet.Install (routerNodes);
- 
-  // Repeat for bottom bridged LAN
-  NetDeviceContainer bottomLanDevices;
-  NetDeviceContainer bottomBridgeDevices;
-  NodeContainer bottomLan (n2, n3, n4);
-  for (int i = 0; i < 3; i++)
+  //NodeContainer routerNodes (n0, n1, n2, n3, n4);
+  //InternetStackHelper internet;
+  //internet.Install (routerNodes);
+
+  // Repeat for other bridges ///////////////
+  NetDeviceContainer LanDevices3;
+  NetDeviceContainer BridgeDevices3;
+  NodeContainer Lan3 (c3, c4);
+  for (int i = 0; i < 2; i++)
     {
-      NetDeviceContainer link = csma.Install (NodeContainer (bottomLan.Get (i), bridge2));
-      bottomLanDevices.Add (link.Get (0));
-      bottomBridgeDevices.Add (link.Get (1));
+      NetDeviceContainer link = csma.Install (NodeContainer (Lan3.Get (i), N3));
+      LanDevices3.Add (link.Get (0));
+      BridgeDevices3.Add (link.Get (1));
     }
-  bridge.Install (bridge2, bottomBridgeDevices);
+  bridge.Install (N3, BridgeDevices3);
+
+  NetDeviceContainer LanDevices4;
+  NetDeviceContainer BridgeDevices4;
+  NodeContainer Lan4 (c5, c6);
+  for (int i = 0; i < 2; i++)
+    {
+      NetDeviceContainer link = csma.Install (NodeContainer (Lan4.Get (i), N4));
+      LanDevices4.Add (link.Get (0));
+      BridgeDevices4.Add (link.Get (1));
+    }
+  bridge.Install (N4, BridgeDevices4);
+
+  NetDeviceContainer LanDevices6;
+  NetDeviceContainer BridgeDevices6;
+  NodeContainer Lan6 (c7, c8);
+  for (int i = 0; i < 2; i++)
+    {
+      NetDeviceContainer link = csma.Install (NodeContainer (Lan6.Get (i), N6));
+      LanDevices6.Add (link.Get (0));
+      BridgeDevices6.Add (link.Get (1));
+    }
+  bridge.Install (N6, BridgeDevices6);
+
  
   // We've got the "hardware" in place.  Now we need to add IP addresses.
   NS_LOG_INFO ("Assign IP Addresses.");
   Ipv4AddressHelper ipv4;
-  ipv4.SetBase ("10.1.1.0", "255.255.255.0");
-  ipv4.Assign (topLanDevices);
-  ipv4.SetBase ("10.1.2.0", "255.255.255.0");
-  ipv4.Assign (bottomLanDevices);
+  ipv4.SetBase ("10.10.18.00", "255.255.255.0");
+  ipv4.Assign (LanDevices1);
+  ipv4.Assign (LanDevices3);
+  ipv4.Assign (LanDevices4);
+  ipv4.Assign (LanDevices6);
  
   //
   // Create router nodes, initialize routing database and set up the routing
@@ -183,10 +162,10 @@ main (int argc, char *argv[])
   uint16_t port = 9;   // Discard port (RFC 863)
  
   OnOffHelper onoff ("ns3::UdpSocketFactory",
-                     Address (InetSocketAddress (Ipv4Address ("10.1.1.3"), port)));
-  onoff.SetConstantRate (DataRate ("500kb/s"));
+                     Address (InetSocketAddress (Ipv4Address ("10.10.18.6"), port)));
+  onoff.SetConstantRate (DataRate ("1000kb/s"));
  
-  ApplicationContainer app = onoff.Install (n0);
+  ApplicationContainer app = onoff.Install (c6);
   // Start the application
   app.Start (Seconds (1.0));
   app.Stop (Seconds (10.0));
@@ -194,7 +173,7 @@ main (int argc, char *argv[])
   // Create an optional packet sink to receive these packets
   PacketSinkHelper sink ("ns3::UdpSocketFactory",
                          Address (InetSocketAddress (Ipv4Address::GetAny (), port)));
-  ApplicationContainer sink1 = sink.Install (n1);
+  ApplicationContainer sink1 = sink.Install (c1);
   sink1.Start (Seconds (1.0));
   sink1.Stop (Seconds (10.0));
  
@@ -202,12 +181,12 @@ main (int argc, char *argv[])
   // Create a similar flow from n3 to n0, starting at time 1.1 seconds
   //
   onoff.SetAttribute ("Remote",
-                      AddressValue (InetSocketAddress (Ipv4Address ("10.1.1.2"), port)));
-  ApplicationContainer app2 = onoff.Install (n3);
+                      AddressValue (InetSocketAddress (Ipv4Address ("10.10.18.7"), port)));
+  ApplicationContainer app2 = onoff.Install (n7);
   app2.Start (Seconds (1.1));
   app2.Stop (Seconds (10.0));
  
-  ApplicationContainer sink2 = sink.Install (n0);
+  ApplicationContainer sink2 = sink.Install (n2);
   sink2.Start (Seconds (1.1));
   sink2.Stop (Seconds (10.0));
  
@@ -218,7 +197,7 @@ main (int argc, char *argv[])
   // Trace output will be sent to the file "csma-bridge-one-hop.tr"
   //
   AsciiTraceHelper ascii;
-  csma.EnableAsciiAll (ascii.CreateFileStream ("csma-bridge-one-hop.tr"));
+  //csma.EnableAsciiAll (ascii.CreateFileStream ("csma-bridge-one-hop.tr"));
  
   //
   // Also configure some tcpdump traces; each interface will be traced.
@@ -227,8 +206,8 @@ main (int argc, char *argv[])
   // and can be read by the "tcpdump -r" command (use "-tt" option to
   // display timestamps correctly)
   //
-  csma.EnablePcapAll ("csma-bridge-one-hop", false);
- 
+  //csma.EnablePcapAll ("csma-bridge-one-hop", false);
+  AnimationInterface anim (L2_Part_b.xml);
   //
   // Now, do the actual simulation.
   //
