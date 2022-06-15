@@ -239,7 +239,7 @@ main (int argc, char **argv)
   // of the devices on and off the bridge respectively, for later configuration
   NetDeviceContainer LanDevicesIp;
   NetDeviceContainer LanDevices1;
-  NetDeviceContainer BridgeDevices1;
+  NetDeviceContainer * BridgeDevices = new NetDeviceContainer[6];
   // It is easier to iterate the nodes in C++ if we put them into a container
   NodeContainer Lan1;
   Lan1.Add(c1);
@@ -249,7 +249,7 @@ main (int argc, char **argv)
       // install a csma channel between the ith lan1 node and the bridge1 node
       NetDeviceContainer link = csma.Install (NodeContainer (Lan1.Get (i), N1));
       LanDevices1.Add (link.Get (0));
-      BridgeDevices1.Add (link.Get (1));
+      BridgeDevices[0].Add (link.Get (1));
       LanDevicesIp.Add (link.Get (0));
     }
   
@@ -258,13 +258,11 @@ main (int argc, char **argv)
   // bridge lives on the node bridge1 and bridges together the topBridgeDevices
   // which are the three CSMA net devices on the node in the diagram above.
   //
-  BridgeHelper bridge;
-  bridge.Install (N1, BridgeDevices1);
- 
+  BridgeHelper bridge; 
 
   // Repeat for other bridges ///////////////
   NetDeviceContainer LanDevices3;
-  NetDeviceContainer BridgeDevices3;
+  //NetDeviceContainer BridgeDevices3;
   NodeContainer Lan3;
   Lan3.Add(c3);
   Lan3.Add(c4);
@@ -272,13 +270,11 @@ main (int argc, char **argv)
     {
       NetDeviceContainer link = csma.Install (NodeContainer (Lan3.Get (i), N3));
       LanDevices3.Add (link.Get (0));
-      BridgeDevices3.Add (link.Get (1));
+      BridgeDevices[2].Add (link.Get (1));
       LanDevicesIp.Add (link.Get (0));
     }
-  bridge.Install (N3, BridgeDevices3);
 
   NetDeviceContainer LanDevices4;
-  NetDeviceContainer BridgeDevices4;
   NodeContainer Lan4;
   Lan4.Add(c5);
   Lan4.Add(c6);
@@ -286,13 +282,11 @@ main (int argc, char **argv)
     {
       NetDeviceContainer link = csma.Install (NodeContainer (Lan4.Get (i), N4));
       LanDevices4.Add (link.Get (0));
-      BridgeDevices4.Add (link.Get (1));
+      BridgeDevices[3].Add (link.Get (1));
       LanDevicesIp.Add (link.Get (0));
     }
-  bridge.Install (N4, BridgeDevices4);
 
   NetDeviceContainer LanDevices6;
-  NetDeviceContainer BridgeDevices6;
   NodeContainer Lan6;
   Lan6.Add(c7);
   Lan6.Add(c8);
@@ -300,10 +294,9 @@ main (int argc, char **argv)
     {
       NetDeviceContainer link = csma.Install (NodeContainer (Lan6.Get (i), N6));
       LanDevices6.Add (link.Get (0));
-      BridgeDevices6.Add (link.Get (1));
+      BridgeDevices[5].Add (link.Get (1));
       LanDevicesIp.Add (link.Get (0));
     }
-  bridge.Install (N6, BridgeDevices6);
 
   // Adding MST Linkes
   NodeContainer BrAll;
@@ -313,19 +306,29 @@ main (int argc, char **argv)
   BrAll.Add(N4);
   BrAll.Add(N5);
   BrAll.Add(N6);
-  NetDeviceContainer BridgeLinks;
+  
   for(unsigned int i = 0;i<out.size();i++){
+    NetDeviceContainer BridgeLinks;
+    NetDeviceContainer BridgeLinks1;
     int x = out[i].second.first - 1;
     int y = out[i].second.second - 1;
-    double w = out[i].first/50;
+    double w = out[i].first/50.0;
     std::cout << "Link from " << x << " to " << y << "  " << w << " us" << endl;
+    CsmaHelper csma;
+    csma.SetChannelAttribute ("DataRate", DataRateValue (1000000)); //1Mbps
     csma.SetChannelAttribute ("Delay", TimeValue (MicroSeconds (w)));
     NetDeviceContainer link = csma.Install (NodeContainer (BrAll.Get(x), BrAll.Get(y)));
-    BridgeLinks.Add (link.Get (0));
-    BridgeLinks.Add (link.Get (1));
-    bridge.Install(BrAll.Get(x),link.Get (0));
-    bridge.Install(BrAll.Get(y),link.Get (1));
+    BridgeDevices[x].Add (link.Get (0));
+    BridgeDevices[y].Add (link.Get (1));
   }
+
+  bridge.Install(BrAll.Get(0),BridgeDevices[0]);
+  bridge.Install(BrAll.Get(1),BridgeDevices[1]);
+  bridge.Install(BrAll.Get(2),BridgeDevices[2]);
+  bridge.Install(BrAll.Get(3),BridgeDevices[3]);
+  bridge.Install(BrAll.Get(4),BridgeDevices[4]);
+  bridge.Install(BrAll.Get(5),BridgeDevices[5]);
+
 
  
   // Add internet stack to the router nodes
@@ -361,24 +364,28 @@ main (int argc, char **argv)
   //
   NS_LOG_INFO ("Create Applications.");
   uint16_t port = 9;   // Discard port (RFC 863)
- 
-  OnOffHelper onoff ("ns3::UdpSocketFactory",
+  // C1 -> C6
+  OnOffHelper onoff1 ("ns3::UdpSocketFactory",
                      Address (InetSocketAddress (Ipv4Address ("10.10.18.6"), port)));
-  onoff.SetConstantRate (DataRate ("1000kb/s"));
+  onoff1.SetConstantRate (DataRate ("1000kb/s"));
+  onoff1.SetAttribute("StartTime", TimeValue(Seconds(0.0)));
  
-  ApplicationContainer app = onoff.Install (c1);
+  ApplicationContainer app1 = onoff1.Install (c1);
   // Start the application
-  app.Start (Seconds (1.0));
-  app.Stop (Seconds (10.0));
+  app1.Start (Seconds (0.0));
+  app1.Stop (Seconds (10.0));
+  
+  // C2 -> C7
+  OnOffHelper onoff2 ("ns3::UdpSocketFactory",
+                     Address (InetSocketAddress (Ipv4Address ("10.10.18.7"), port)));
+  onoff2.SetConstantRate (DataRate ("1000kb/s"));
+  onoff2.SetAttribute("StartTime", TimeValue(Seconds(0.0)));
  
-  //
-  // Create a similar flow from n3 to n0, starting at time 1.1 seconds
-  //
-  onoff.SetAttribute ("Remote",
-                      AddressValue (InetSocketAddress (Ipv4Address ("10.10.18.7"), port)));
-  ApplicationContainer app2 = onoff.Install (c2);
-  app2.Start (Seconds (1.1));
+  ApplicationContainer app2 = onoff2.Install (c2);
+  // Start the application
+  app2.Start (Seconds (0.0));
   app2.Stop (Seconds (10.0));
+  
  
   // 8. Install FlowMonitor on all nodes
   FlowMonitorHelper flowmon;
@@ -444,7 +451,7 @@ main (int argc, char **argv)
   // Now, do the actual simulation.
   //
   NS_LOG_INFO ("Run Simulation.");
-  Simulator::Stop (Seconds (10));
+  Simulator::Stop (Seconds (10.0));
   Simulator::Run ();
 
   // 10. Print per flow statistics 
