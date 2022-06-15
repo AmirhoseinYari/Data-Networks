@@ -31,7 +31,7 @@ struct Graph
   
     // Function to find MST using Kruskal's
     // MST algorithm
-    vector<pair<int, int>> kruskalMST();
+    vector<pair<double, pair<int, int>>> kruskalMST();
 };
   
 // To represent Disjoint Sets
@@ -89,10 +89,10 @@ struct DisjointSets
   
  /* Functions returns vector of the MST*/ 
   
-vector< pair<int, int> > Graph::kruskalMST()
+vector< pair<double, pair<int, int> >> Graph::kruskalMST()
 {
     double mst_wt = 0; // Initialize result
-    vector< pair<int, int> > out; // vector of the tree
+    vector< pair<double, pair<int, int> >> out; // vector of the tree
 
     // Sort edges in increasing order on basis of cost
     sort(edges.begin(), edges.end());
@@ -106,6 +106,7 @@ vector< pair<int, int> > Graph::kruskalMST()
     {
         int u = it->second.first;
         int v = it->second.second;
+        double w = it->first;
   
         int set_u = ds.find(u);
         int set_v = ds.find(v);
@@ -118,7 +119,7 @@ vector< pair<int, int> > Graph::kruskalMST()
             // Current edge will be in the MST
             // so print it
             //cout << u << " ---- " << v << endl;
-            out.push_back({u, v}); // nodes of the tree
+            out.push_back({w, {u, v}}); // nodes of the tree
   
             // Update MST weight
             mst_wt += it->first;
@@ -158,11 +159,12 @@ int main()
     g.addEdge(5, 6, 50);
 
     //cout << "Edges of MST are \n";
-    vector< pair<int, int> > out = g.kruskalMST();
+    vector< pair <double, pair<int, int> >> out = g.kruskalMST();
     
     int i = 0;
+    cout << "the links are : "<<"\n";
     for(i;i<out.size();i++){
-        cout << out[i].first << "  &&&&  " << out[i].second << endl;
+        cout << out[i].second.first << " -- " << out[i].first << " -- " << out[i].second.second  << endl;
     }
   
     return 0;
