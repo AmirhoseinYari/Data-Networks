@@ -194,7 +194,6 @@ main (int argc, char **argv)
       std::cout << out[i].second.first << " -- " << out[i].first << " -- " << out[i].second.second  << endl;
   }
 
-
   //
   // Users may find it convenient to turn on explicit debugging
   // for selected modules; the below lines suggest how to do this
@@ -306,6 +305,28 @@ main (int argc, char **argv)
     }
   bridge.Install (N6, BridgeDevices6);
 
+  // Adding MST Linkes
+  NodeContainer BrAll;
+  BrAll.Add(N1);
+  BrAll.Add(N2);
+  BrAll.Add(N3);
+  BrAll.Add(N4);
+  BrAll.Add(N5);
+  BrAll.Add(N6);
+  NetDeviceContainer BridgeLinks;
+  for(unsigned int i = 0;i<out.size();i++){
+    int x = out[i].second.first - 1;
+    int y = out[i].second.second - 1;
+    double w = out[i].first/50;
+    std::cout << "Link from " << x << " to " << y << "  " << w << " us" << endl;
+    csma.SetChannelAttribute ("Delay", TimeValue (MicroSeconds (w)));
+    NetDeviceContainer link = csma.Install (NodeContainer (BrAll.Get(x), BrAll.Get(y)));
+    BridgeLinks.Add (link.Get (0));
+    BridgeLinks.Add (link.Get (1));
+    bridge.Install(BrAll.Get(x),link.Get (0));
+    bridge.Install(BrAll.Get(y),link.Get (1));
+  }
+
  
   // Add internet stack to the router nodes
   NodeContainer LanAll;
@@ -370,8 +391,11 @@ main (int argc, char **argv)
   sink2.Start (Seconds (1.1));
   sink2.Stop (Seconds (10.0));
  
+  // 8. Install FlowMonitor on all nodes
+  FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
+
   NS_LOG_INFO ("Configure Tracing.");
- 
   //
   // Configure tracing of all enqueue, dequeue, and NetDevice receive events.
   // Trace output will be sent to the file "csma-bridge-one-hop.tr"
@@ -379,24 +403,44 @@ main (int argc, char **argv)
   AsciiTraceHelper ascii;
   //csma.EnableAsciiAll (ascii.CreateFileStream ("csma-bridge-one-hop.tr"));
  
-  //set mobility, position, ... nodes
+  //set mobility, position, ... nodes and Bridges
   MobilityHelper mobility;
   mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
                                 "MinX", DoubleValue(-0.0),
                                 "MinY", DoubleValue(5.0),
                                 "DeltaX", DoubleValue(10.0),
                                 "DeltaY", DoubleValue(0.0),
-                                "GridWidth", UintegerValue(50.0),
+                                "GridWidth", UintegerValue(80.0),
                                 "LayoutType", StringValue("RowFirst"));
 
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  //Mobility for All nodes
-  for (int i=0;i<14;i++){
-    positionAlloc->Add (Vector (10.0*i,0.0,0.0));//Ai
+  // Mobility for All nodes
+  for (int i=0;i<8;i++){
+    positionAlloc->Add (Vector (10.0*i-(i/4)*40,10.0*(i/4),0.0));
   }
   mobility.SetPositionAllocator (positionAlloc);
   mobility.Install (LanAll);
+
+  // Mobility for Bridges
+  MobilityHelper mobility2;
+  mobility2.SetPositionAllocator ("ns3::GridPositionAllocator",
+                                "MinX", DoubleValue(-0.0),
+                                "MinY", DoubleValue(5.0),
+                                "DeltaX", DoubleValue(10.0),
+                                "DeltaY", DoubleValue(0.0),
+                                "GridWidth", UintegerValue(80.0),
+                                "LayoutType", StringValue("RowFirst"));
+
+  mobility2.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
+  Ptr<ListPositionAllocator> positionAlloc2 = CreateObject<ListPositionAllocator> ();
+
+  for (int i=0;i<6;i++){
+    positionAlloc2->Add (Vector (10.0*i,20.0,0.0));
+  }
+  mobility2.SetPositionAllocator (positionAlloc2);
+  mobility2.Install (BrAll);
+
   //
   // Also configure some tcpdump traces; each interface will be traced.
   // The output files will be named:
@@ -411,6 +455,32 @@ main (int argc, char **argv)
   //
   NS_LOG_INFO ("Run Simulation.");
   Simulator::Run ();
+
+  // 10. Print per flow statistics 
+  monitor->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+      // first 2 FlowIds are for ECHO apps, we don't want to display them
+      //
+      // Duration for throughput measurement is 9.0 seconds, since
+      //   StartTime of the OnOffApplication is at about "second 1"
+      // and
+      //   Simulator::Stops at "second 10".
+      if (i->first > 0)
+        {
+          Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+          std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+          std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+          std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+          std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+          std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+          std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+          std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+        }
+    }
+  
   Simulator::Destroy ();
   NS_LOG_INFO ("Done."); 
 }
