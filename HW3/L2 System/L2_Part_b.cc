@@ -366,33 +366,23 @@ main (int argc, char **argv)
                      Address (InetSocketAddress (Ipv4Address ("10.10.18.6"), port)));
   onoff.SetConstantRate (DataRate ("1000kb/s"));
  
-  ApplicationContainer app = onoff.Install (c6);
+  ApplicationContainer app = onoff.Install (c1);
   // Start the application
   app.Start (Seconds (1.0));
   app.Stop (Seconds (10.0));
- 
-  // Create an optional packet sink to receive these packets
-  PacketSinkHelper sink ("ns3::UdpSocketFactory",
-                         Address (InetSocketAddress (Ipv4Address::GetAny (), port)));
-  ApplicationContainer sink1 = sink.Install (c1);
-  sink1.Start (Seconds (1.0));
-  sink1.Stop (Seconds (10.0));
  
   //
   // Create a similar flow from n3 to n0, starting at time 1.1 seconds
   //
   onoff.SetAttribute ("Remote",
                       AddressValue (InetSocketAddress (Ipv4Address ("10.10.18.7"), port)));
-  ApplicationContainer app2 = onoff.Install (c7);
+  ApplicationContainer app2 = onoff.Install (c2);
   app2.Start (Seconds (1.1));
   app2.Stop (Seconds (10.0));
  
-  ApplicationContainer sink2 = sink.Install (c2);
-  sink2.Start (Seconds (1.1));
-  sink2.Stop (Seconds (10.0));
- 
   // 8. Install FlowMonitor on all nodes
   FlowMonitorHelper flowmon;
+  std::cout << "debug"<<endl;
   Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
 
   NS_LOG_INFO ("Configure Tracing.");
@@ -449,19 +439,18 @@ main (int argc, char **argv)
   // display timestamps correctly)
   //
   //csma.EnablePcapAll ("csma-bridge-one-hop", false);
-  //AnimationInterface anim ("L2_Part_b.xml");
+  AnimationInterface anim ("L2_Part_b.xml");
   //
   // Now, do the actual simulation.
   //
   NS_LOG_INFO ("Run Simulation.");
+  Simulator::Stop (Seconds (10));
   Simulator::Run ();
 
   // 10. Print per flow statistics 
-  
   monitor->CheckForLostPackets ();
-  std::cout << "debug"<<endl;
   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-  /*FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
       // first 2 FlowIds are for ECHO apps, we don't want to display them
@@ -482,7 +471,7 @@ main (int argc, char **argv)
           std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
         }
     }
-  */
+  
   Simulator::Destroy ();
   NS_LOG_INFO ("Done."); 
 }
