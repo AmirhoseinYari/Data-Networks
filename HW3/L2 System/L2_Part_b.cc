@@ -449,7 +449,7 @@ main (int argc, char **argv)
   // display timestamps correctly)
   //
   //csma.EnablePcapAll ("csma-bridge-one-hop", false);
-  AnimationInterface anim ("L2_Part_b.xml");
+  //AnimationInterface anim ("L2_Part_b.xml");
   //
   // Now, do the actual simulation.
   //
@@ -457,9 +457,11 @@ main (int argc, char **argv)
   Simulator::Run ();
 
   // 10. Print per flow statistics 
+  
   monitor->CheckForLostPackets ();
+  std::cout << "debug"<<endl;
   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+  /*FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
       // first 2 FlowIds are for ECHO apps, we don't want to display them
@@ -480,7 +482,7 @@ main (int argc, char **argv)
           std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
         }
     }
-  
+  */
   Simulator::Destroy ();
   NS_LOG_INFO ("Done."); 
 }
